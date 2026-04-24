@@ -90,6 +90,17 @@ You can export them to CSV and point `ids.train` to the CSV.
 - `models/`: saved model artifacts (created after training)
 - `data/`: your datasets (not committed by default)
 - `Dockerfile` / `render.yaml`: deploy to [Render](https://render.com)
+- `DEPLOY.md`: **fastest** deploy steps (read this first)
+
+## Deploy (pick one — fastest first)
+
+| Method | Speed | Best for |
+|--------|--------|----------|
+| **Streamlit Community Cloud** | Fastest (no Docker) | Public demo, viva, quick URL |
+| **Render (Docker)** | Slower first build | Fixed production-style URL |
+| **Local** | Instant on your PC | Development |
+
+**Full steps:** [DEPLOY.md](DEPLOY.md) — *recommended: push to GitHub → Streamlit Cloud → set `IDS_USER` / `IDS_PASS` in app secrets → open URL.*
 
 ## Deploy: GitHub (`santoshi-33` or any account) + Render
 

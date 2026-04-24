@@ -1,0 +1,8 @@
+# Streamlit (local + Streamlit Community Cloud)
+[server]
+headless = true
+enableCORS = true
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
