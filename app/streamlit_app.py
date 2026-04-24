@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ids.live import scapy_sniff_available, simulate_stream
 from ids.pipeline import predict_df
-from ids.reporting import build_ids_report_pdf, load_metrics_json, try_send_email_with_pdf
+from ids.reporting import build_ids_report_pdf, load_metrics_json
 from ids.user_store import env_bootstrap_exists, sign_up, verify_user
 
 
@@ -183,23 +183,16 @@ def render_metrics() -> None:
         st.info("No metrics found at `models/metrics.json` yet.")
 
     st.divider()
-    st.subheader("Report (PDF) + email")
+    st.subheader("Report (PDF)")
     st.caption(
         "Build a PDF with training metrics (and the latest scan summary if you ran "
-        "“Run Detection” in Upload & Scan in this session). Configure SMTP in secrets to email."
+        "“Run Detection” in Upload & Scan in this session)."
     )
-    to_email = st.text_input(
-        "Send PDF to email",
-        value=st.session_state.get("user_email", "") or "",
-        help="Also configure SMTP settings in environment/secrets to enable email send.",
-    )
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
     with c1:
         gen = st.button("Generate PDF report", type="primary")
     with c2:
-        email_btn = st.button("Email PDF report (SMTP)")
-    with c3:
-        st.caption("Tip: run a scan on Upload & Scan first for richer report.")
+        st.caption("Tip: run a scan on Upload & Scan first for a richer report.")
 
     def _build_pdf_bytes() -> bytes:
         metrics = load_metrics_json("models/metrics.json")
@@ -214,27 +207,6 @@ def render_metrics() -> None:
     if gen:
         with st.spinner("Building PDF..."):
             st.session_state["last_report_pdf"] = _build_pdf_bytes()
-
-    if email_btn:
-        if not _is_valid_email(to_email):
-            st.error("Enter a valid recipient email.")
-        else:
-            with st.spinner("Sending email..."):
-                pdf_bytes = st.session_state.get("last_report_pdf")
-                if pdf_bytes is None:
-                    pdf_bytes = _build_pdf_bytes()
-                    st.session_state["last_report_pdf"] = pdf_bytes
-                try:
-                    try_send_email_with_pdf(
-                        to_email=to_email.strip(),
-                        subject="IDS scan report (PDF)",
-                        body="Attached: IDS report PDF generated from the dashboard.",
-                        pdf_bytes=pdf_bytes,
-                        filename="ids_report.pdf",
-                    )
-                    st.success(f"Emailed report to: {to_email.strip()}")
-                except Exception as e:
-                    st.error(str(e))
 
     pdf_bytes: Optional[bytes] = st.session_state.get("last_report_pdf")  # type: ignore[assignment]
     if pdf_bytes:

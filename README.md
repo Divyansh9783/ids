@@ -57,32 +57,26 @@ Optional fixed “single user” login via env / Streamlit secrets (useful on St
 IDS_USER=you@example.com IDS_PASS=yourpass streamlit run app/streamlit_app.py
 ```
 
-### 5) PDF report + email (SMTP)
+### 5) PDF report (dashboard)
 
-The dashboard can generate a PDF and optionally email it.
+On **Home**, use **Generate PDF report** and **Download last generated PDF**.  
+Run **Upload & Scan → Run Detection** first if you want scan summary in the PDF.
 
-Set these environment variables (or Streamlit Cloud **Secrets**):
+### 6) Synthetic test datasets (KB / MB / ~2 GB)
 
-- `IDS_SMTP_HOST` (e.g. `smtp.gmail.com`, or Brevo `smtp-relay.brevo.com`)
-- `IDS_SMTP_PORT` (usually `587` for STARTTLS, or `465` for SSL)
-- `IDS_SMTP_USER` (your SMTP username)
-- `IDS_SMTP_PASS` (app password / SMTP password)
-- `IDS_SMTP_FROM` (the From address; often same as `IDS_SMTP_USER`)
-- `IDS_SMTP_STARTTLS` (default `1`; set `0` if your provider does not use STARTTLS)
-- `IDS_SMTP_SSL` (set `1` to force `SMTP_SSL` on non-465 ports; usually not needed)
+For load testing, generate NSL‑KDD‑shaped CSVs:
 
-Brevo (example):
-
-```toml
-IDS_SMTP_HOST="smtp-relay.brevo.com"
-IDS_SMTP_PORT="587"
-IDS_SMTP_USER="xxxx@yourdomain.com"        # Brevo SMTP login (shown in Brevo SMTP settings)
-IDS_SMTP_PASS="YOUR_BREVO_SMTP_KEY"        # Brevo SMTP key (not your web login password)
-IDS_SMTP_FROM="xxxx@yourdomain.com"        # Must be a verified sender in Brevo
-IDS_SMTP_STARTTLS="1"
+```bash
+python scripts/generate_test_datasets.py --skip-2gb
 ```
 
-If you use port `465`, you typically do not need `STARTTLS` (the app will use implicit TLS automatically when port is 465).
+Full run (writes ~2 GB — needs free disk and time):
+
+```bash
+python scripts/generate_test_datasets.py
+```
+
+Outputs under `data/synth/` by default: `synth_small_kb.csv` (~tens of KB), `synth_medium_mb.csv` (~30 MB), `synth_large_2gb.csv` (~2 GB). Tune with `--kb-rows`, `--mb-target`, `--target-gb`.
 
 ## Data notes (NSL-KDD / CICIDS2017)
 
