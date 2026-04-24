@@ -9,3 +9,4 @@ joblib
 plotly
 imbalanced-learn
 scapy
+fpdf2

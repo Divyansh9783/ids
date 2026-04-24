@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from ids.live import scapy_sniff_available, simulate_stream
 from ids.pipeline import predict_df
+from ids.reporting import build_ids_report_pdf, load_metrics_json, try_send_email_with_pdf
 
 
 APP_TITLE = "ML-based Intrusion Detection System (IDS)"
@@ -30,9 +31,21 @@ def _get_env(key: str, default: str) -> str:
     return v if v is not None and v != "" else default
 
 
+def _is_valid_email(s: str) -> bool:
+    s = s.strip()
+    if "@" not in s or s.count("@") != 1:
+        return False
+    local, domain = s.split("@", 1)
+    if not local or not domain or "." not in domain:
+        return False
+    return True
+
+
 def check_login() -> bool:
     if "authed" not in st.session_state:
         st.session_state.authed = False
+    if "user_email" not in st.session_state:
+        st.session_state.user_email = ""
 
     if st.session_state.authed:
         return True
@@ -40,19 +53,24 @@ def check_login() -> bool:
     st.title(APP_TITLE)
     st.subheader("Authentication")
 
-    user = st.text_input("Username", value="", autocomplete="username")
+    email = st.text_input("Email (login id)", value="", autocomplete="email")
     pw = st.text_input("Password", value="", type="password", autocomplete="current-password")
 
-    expected_user = _get_env("IDS_USER", "admin")
+    # Expected credentials are configured in Streamlit Cloud Secrets / environment variables.
+    # Recommended: set IDS_USER to the allowed email, IDS_PASS to the password.
+    expected_email = _get_env("IDS_USER", "admin@example.com")
     expected_pw = _get_env("IDS_PASS", "admin123")
 
     if st.button("Login"):
-        if user == expected_user and pw == expected_pw:
+        if not _is_valid_email(email):
+            st.error("Please enter a valid email address.")
+        elif email.strip().lower() == expected_email.strip().lower() and pw == expected_pw:
             st.session_state.authed = True
+            st.session_state.user_email = email.strip()
             st.rerun()
         else:
-            st.error("Invalid username/password.")
-    st.info("Default login: admin / admin123 (change via IDS_USER, IDS_PASS env vars).")
+            st.error("Invalid email or password.")
+    st.info("Configure allowed login in secrets/env: IDS_USER (email) and IDS_PASS.")
     return False
 
 
@@ -133,6 +151,69 @@ def render_metrics() -> None:
     else:
         st.info("No metrics found at `models/metrics.json` yet.")
 
+    st.divider()
+    st.subheader("Report (PDF) + email")
+    st.caption(
+        "Build a PDF with training metrics (and the latest scan summary if you ran "
+        "“Run Detection” in Upload & Scan in this session). Configure SMTP in secrets to email."
+    )
+    to_email = st.text_input(
+        "Send PDF to email",
+        value=st.session_state.get("user_email", "") or "",
+        help="Also configure SMTP settings in environment/secrets to enable email send.",
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        gen = st.button("Generate PDF report", type="primary")
+    with c2:
+        email_btn = st.button("Email PDF report (SMTP)")
+    with c3:
+        st.caption("Tip: run a scan on Upload & Scan first for richer report.")
+
+    def _build_pdf_bytes() -> bytes:
+        metrics = load_metrics_json("models/metrics.json")
+        scan = st.session_state.get("last_scan_summary")
+        return build_ids_report_pdf(
+            title="Intrusion Detection System Report",
+            user_email=str(st.session_state.get("user_email", "")),
+            metrics=metrics,
+            scan_summary=scan,
+        )
+
+    if gen:
+        with st.spinner("Building PDF..."):
+            st.session_state["last_report_pdf"] = _build_pdf_bytes()
+
+    if email_btn:
+        if not _is_valid_email(to_email):
+            st.error("Enter a valid recipient email.")
+        else:
+            with st.spinner("Sending email..."):
+                pdf_bytes = st.session_state.get("last_report_pdf")
+                if pdf_bytes is None:
+                    pdf_bytes = _build_pdf_bytes()
+                    st.session_state["last_report_pdf"] = pdf_bytes
+                try:
+                    try_send_email_with_pdf(
+                        to_email=to_email.strip(),
+                        subject="IDS scan report (PDF)",
+                        body="Attached: IDS report PDF generated from the dashboard.",
+                        pdf_bytes=pdf_bytes,
+                        filename="ids_report.pdf",
+                    )
+                    st.success(f"Emailed report to: {to_email.strip()}")
+                except Exception as e:
+                    st.error(str(e))
+
+    pdf_bytes: Optional[bytes] = st.session_state.get("last_report_pdf")  # type: ignore[assignment]
+    if pdf_bytes:
+        st.download_button(
+            "Download last generated PDF",
+            data=pdf_bytes,
+            file_name="ids_report.pdf",
+            mime="application/pdf",
+        )
+
 
 def _load_default_demo_df() -> Optional[pd.DataFrame]:
     demo_path = Path("data/test.csv")
@@ -187,6 +268,7 @@ def render_upload_and_scan(pipe: Any) -> None:
                 y_pred = out["prediction"].astype(str).str.lower().map({"normal": 0, "attack": 1})
                 if y_true.notna().all() and y_pred.notna().all():
                     cm_local = confusion_matrix(y_true, y_pred)
+                    st.session_state["last_scan_confusion"] = cm_local.tolist()
                     cm_df = pd.DataFrame(
                         cm_local,
                         index=["Actual Normal", "Actual Attack"],
@@ -213,6 +295,15 @@ def render_upload_and_scan(pipe: Any) -> None:
             file_name="ids_results.csv",
             mime="text/csv",
         )
+
+        # Save summary for PDF report
+        st.session_state["last_scan_summary"] = {
+            "rows": int(len(out)),
+            "normal": int((out["prediction"] == "normal").sum()),
+            "attack": int((out["prediction"] == "attack").sum()),
+            "head_rows": out.head(15).to_dict(orient="records"),
+            "has_labels": bool("label" in out.columns),
+        }
 
 
 def render_live_monitoring(pipe: Any) -> None:
